@@ -16,7 +16,7 @@ venv/
 *.env
 
 # Rapport généré
-/reports/
+reports/
 
 # Editor & OS
 *.swp
