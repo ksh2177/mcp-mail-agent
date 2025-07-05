@@ -88,7 +88,7 @@ python llm_wrapper.py reports/report_2025-07-05.json
 -  Générer un fichier `.summary.md` lisible humainement
 -  Créer une intégration Plane.so (task auto pour `alert`, `finance`)
 -  Publier alertes critiques sous forme de GitLab Issue
--  Intégration de notification via webhook (Matrix, Discord, etc.)
+[text](about:blank#blocked)-  Intégration de notification via webhook (Matrix, Discord, etc.)
 -  Ajouter une interface terminale via `textual` pour suivi/visualisation
 -  Implémenter une auto-réponse (template + SMTP Proton Bridge)
 -  Dockeriser le projet + ajouter `Makefile` ou `playbook.yml` pour orchestrer
