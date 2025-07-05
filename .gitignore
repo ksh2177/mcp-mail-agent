@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyz
+*.log
+
+# Virtualenv
+.venv/
+env/
+venv/
+
+# Configuration
+.env
+*.env
+
+# Rapport généré
+/reports/
+
+# Editor & OS
+*.swp
+.DS_Store
+*.bak
+*.~*
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# Go (résidu ou projet secondaire)
+/go/
+*.go
+
+# Packages/Débiles
+*.deb
+*.tar.gz
+*.zip
+
+# Tests
+.coverage
+.tox/
+nosetests.xml
