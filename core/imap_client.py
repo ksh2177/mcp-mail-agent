@@ -33,6 +33,43 @@ class IMAPClient:
         except Exception as e:
             print(f"❌ Echec de connexion IMAP : {e}")
             self.conn = None
+
+    def list_all_accessible_folders(self) -> list:
+        if not self.conn:
+            self.connect()
+            if not self.conn:
+                return []
+
+        folders = []
+        seen = set()
+
+        typ, data = self.conn.list("", "*")
+        if typ != "OK":
+            return []
+
+        for raw in data:
+            decoded = raw.decode()
+            if decoded in seen:
+                continue
+            seen.add(decoded)
+
+            # Regex tolérante
+            parts = re.search(r'\((.*?)\)\s+"?([^"]+)"?\s+"?([^"]+)"?', decoded)
+            if parts:
+                flags, separator, name = parts.groups()
+
+                # ⚠️ Tentative active de sélection : vérifie si le dossier est réel
+                try:
+                    self.conn.select(name)
+                    folders.append({
+                        "name": name,
+                        "separator": separator,
+                        "flags": flags.split()
+                    })
+                except:
+                    continue
+
+        return folders     
     
     def fetch_unread(self, limit=5):
         if not self.conn:

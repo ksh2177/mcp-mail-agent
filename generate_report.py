@@ -7,7 +7,7 @@ from pathlib import Path
 
 client = IMAPClient()
 client.connect()
-mails = client.fetch_recent(limit=10, hours=24)
+mails = client.fetch_recent(limit=20, hours=48)
 
 lines = ["# Rapport de mails récents\n"]
 

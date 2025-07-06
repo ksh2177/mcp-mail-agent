@@ -8,7 +8,7 @@ app = typer.Typer()
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
 def summarize_text(text: str) -> str:
-    prompt = f"Résume ce mail en une phrase. Ignore les signatures.\n\n{text}"
+    prompt = f"Tu es un assistant francophone. Résume le mail ci-dessous en **français** et en **une seul phrase courte**. Ignore les signatures et pieds de page.n\n{text}"
 
     response = requests.post(OLLAMA_URL, json={
         "model": "mistral",

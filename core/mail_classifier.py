@@ -1,6 +1,8 @@
 import typer
-from pathlib import Path
 import json
+from pathlib import Path
+from typing import Optional
+
 
 app = typer.Typer()
 
@@ -31,7 +33,10 @@ def classify_mail(mail:dict) -> dict:
     return mail
 
 @app.command()
-def tag(input_file: Path = typer.Argument(..., help="Fichier .json à enrichir")):
+def tag(
+    input_file: Path = typer.Argument(..., help="Fichier .json à enrichir"),
+    output_file: Optional[Path] = typer.Option(None, help="Fichier de sortie (.json)"),
+):
     if not input_file.exists():
         typer.echo(f"❌ Fichier introuvable: {input_file}")
         raise typer.Exit(1)
@@ -41,11 +46,12 @@ def tag(input_file: Path = typer.Argument(..., help="Fichier .json à enrichir")
 
     updated = [classify_mail(m) for m in mails]
 
-    with input_file.open("w", encoding="utf-8") as f:
-        
+    target_file = output_file or input_file
+
+    with target_file.open("w", encoding="utf-8") as f:
         json.dump(updated, f, ensure_ascii=False, indent = 2)
 
-    type.echo(f"✅ Classifications ajoutées dans : {input_file}")
+    typer.echo(f"✅ Classifications ajoutées dans : {target_file}")
 
 if __name__ == "__main__":
     app()
