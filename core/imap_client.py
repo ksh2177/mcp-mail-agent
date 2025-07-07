@@ -35,6 +35,40 @@ class IMAPClient:
             print(f"❌ Echec de connexion IMAP : {e}")
             self.conn = None
 
+    def list_all_accessible_folders(self) -> list:
+        if not self.conn:
+            self.connect()
+            if not self.conn:
+                return []
+
+        folders = []
+        seen = set()
+
+        typ, data = self.conn.list("", "*")
+        if typ != "OK":
+            return []
+
+        for raw in data:
+            decoded = raw.decode()
+            if decoded in seen:
+                continue
+            seen.add(decoded)
+
+            parts = re.search(r'\((.*?)\)\s+"?([^"]+)"?\s+"?([^"]+)"?', decoded)
+            if parts:
+                flags, separator, name = parts.groups()
+                try:
+                    self.conn.select(name)
+                    folders.append({
+                        "name": name,
+                        "separator": separator,
+                        "flags": flags.split()
+                    })
+                except:
+                    continue
+
+        return folders
+
     def fetch_recent(self, limit=10, hours=24, folder="INBOX"):
         if not self.conn:
             print("❌ Pas de connexion active")
