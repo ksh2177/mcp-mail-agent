@@ -1,15 +1,13 @@
 import json
-from core.imap_client import IMAPClient
-from email.utils import parsedate_to_datetime
-from email.header import decode_header
+import typer
 from datetime import datetime
 from pathlib import Path
+from email.utils import parsedate_to_datetime
+from email.header import decode_header
 
-client = IMAPClient()
-client.connect()
-mails = client.fetch_recent(limit=20, hours=48)
+from core.imap_client import IMAPClient
 
-lines = ["# Rapport de mails récents\n"]
+app = typer.Typer()
 
 def decode_mime_header(value: str) -> str:
     decoded = decode_header(value)
@@ -18,54 +16,76 @@ def decode_mime_header(value: str) -> str:
         for part, charset in decoded
     ])
 
-# Création du fichier .md
-for mail in mails:
-    from_info = client._parse_from(mail["from"])
+def slugify(label: str) -> str:
+    return label.replace("Labels/", "").replace("/", "_").replace(" ", "_")
 
-    try:
-        dt = parsedate_to_datetime(mail["date"])
-        short_date = dt.strftime("%d %b %H:%M")
-    except Exception:
-        short_date = mail["date"]
+@app.command()
+def generate(
+    label: str = typer.Option("INBOX", help="Nom du label IMAP à cibler (ex: Labels/ksh.proton)"),
+    hours: int = typer.Option(24, help="Fenêtre de récupération en heures"),
+    limit: int = typer.Option(30, help="Nombre maximum de mails"),
+):
+    client = IMAPClient()
+    client.connect()
 
-    lines.append(f"## [{short_date}] {from_info['name']} <{from_info['email']}>")
-    
-    subject = decode_mime_header(mail["subject"])
-    lines.append(f"** Sujet :** {subject}\n")
+    mails = client.fetch_recent(limit=limit, hours=hours, folder=label)
+    if not mails:
+        typer.echo("⚠️ Aucun mail récupéré.")
+        raise typer.Exit(0)
 
-    preview = mail["body"][:300].replace("\n", " ")
-    lines.append(f"** Aperçu :** {preview}...\n")
+    lines = ["# Rapport de mails récents\\n"]
 
-report_path = Path("reports")
-report_path.mkdir(exist_ok=True)
-filename = report_path / f"report_{datetime.now().strftime('%Y-%m-%d')}.md"
+    for mail in mails:
+        from_info = client._parse_from(mail["from"])
+        try:
+            dt = parsedate_to_datetime(mail["date"])
+            short_date = dt.strftime("%d %b %H:%M")
+        except Exception:
+            short_date = mail["date"]
 
-with open(filename, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+        subject = decode_mime_header(mail["subject"])
+        preview = mail["body"][:300].replace("\\n", " ")
 
-print(f"✅ Rapport généré : {filename}")
+        lines.append(f"## [{short_date}] {from_info['name']} <{from_info['email']}>")
+        lines.append(f"** Sujet :** {subject}\\n")
+        lines.append(f"** Aperçu :** {preview}...\\n")
 
-# Création du fichier .json
-json_data = []
-for mail in mails:
-    from_info = client._parse_from(mail["from"])
-    try:
-        dt = parsedate_to_datetime(mail["date"])
-        iso_date = dt.isoformat()
-    except Exception:
-        iso_date = mail["date"]
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    base_name = (
+        f"label_{slugify(label)}_report_{date_str}"
+        if label != "INBOX" else f"report_{date_str}"
+    )
 
-    json_data.append({
-        "from_name": from_info["name"],
-        "from_email": from_info["email"],
-        "subject" : decode_mime_header(mail["subject"]),
-        "date": iso_date,
-        "body": mail["body"].strip()
-    })
+    report_path = Path("reports")
+    report_path.mkdir(exist_ok=True)
 
-# Ecriture du fichier .json
-json_filename = report_path / f"report_{datetime.now().strftime('%Y-%m-%d')}.json"
-with open(json_filename, "w", encoding="utf-8") as f:
-    json.dump(json_data, f, ensure_ascii=False, indent=2)
+    md_file = report_path / f"{base_name}.md"
+    with md_file.open("w", encoding="utf-8") as f:
+        f.write("\\n".join(lines))
+    typer.echo(f"✅ Rapport généré : {md_file}")
 
-print(f"✅ JSON généré : {json_filename}")
+    json_data = []
+    for mail in mails:
+        from_info = client._parse_from(mail["from"])
+        try:
+            dt = parsedate_to_datetime(mail["date"])
+            iso_date = dt.isoformat()
+        except Exception:
+            iso_date = mail["date"]
+
+        json_data.append({
+            "from_name": from_info["name"],
+            "from_email": from_info["email"],
+            "subject": decode_mime_header(mail["subject"]),
+            "date": iso_date,
+            "body": mail["body"].strip()
+        })
+
+    json_file = report_path / f"{base_name}.json"
+    with json_file.open("w", encoding="utf-8") as f:
+        json.dump(json_data, f, ensure_ascii=False, indent=2)
+
+    typer.echo(f"✅ JSON généré : {json_file}")
+
+if __name__ == "__main__":
+    app()

@@ -1,0 +1,23 @@
+#mail_table {
+    background: #282a36;
+    color: #f8f8f2;
+    border: solid #6272a4;
+    height: 100%;
+}
+
+#detail {
+    background: #1e1f29;
+    color: #f8f8f2;
+    padding: 2 2;
+    border: panel #6272a4;
+}
+
+DataTable > .cursor {
+    background: #bd93f9;
+    color: black;
+}
+
+Screen {
+    background: #1e1f29;
+    color: #f8f8f2;
+}

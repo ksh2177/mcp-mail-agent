@@ -1,3 +1,4 @@
+
 import os
 import re
 import quopri
@@ -5,7 +6,7 @@ import imaplib
 import base64
 from dotenv import load_dotenv
 from email.header import decode_header
-from datetime import datetime,  timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from bs4 import BeautifulSoup
 
@@ -23,7 +24,7 @@ class IMAPClient:
         self.user = user
         self.password = password
         self.conn = None
-    
+
     def connect(self):
         try:
             self.conn = imaplib.IMAP4(self.host, self.port)
@@ -34,67 +35,7 @@ class IMAPClient:
             print(f"❌ Echec de connexion IMAP : {e}")
             self.conn = None
 
-    def list_all_accessible_folders(self) -> list:
-        if not self.conn:
-            self.connect()
-            if not self.conn:
-                return []
-
-        folders = []
-        seen = set()
-
-        typ, data = self.conn.list("", "*")
-        if typ != "OK":
-            return []
-
-        for raw in data:
-            decoded = raw.decode()
-            if decoded in seen:
-                continue
-            seen.add(decoded)
-
-            # Regex tolérante
-            parts = re.search(r'\((.*?)\)\s+"?([^"]+)"?\s+"?([^"]+)"?', decoded)
-            if parts:
-                flags, separator, name = parts.groups()
-
-                # ⚠️ Tentative active de sélection : vérifie si le dossier est réel
-                try:
-                    self.conn.select(name)
-                    folders.append({
-                        "name": name,
-                        "separator": separator,
-                        "flags": flags.split()
-                    })
-                except:
-                    continue
-
-        return folders     
-    
-    def fetch_unread(self, limit=5):
-        if not self.conn:
-            print("❌ Pas de connexion active")
-            return []
-
-        messages = []
-
-        try:
-            self.conn.select("INBOX")
-            typ, data = self.conn.search(None, 'UNSEEN')
-            print(f"🔎 Résultat search UNSEEN : {data}")
-            ids = data[0].split()
-
-            for num in ids[:limit]:
-                typ, msg_data = self.conn.fetch(num, '(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])')
-                raw = msg_data[0][1].decode()
-                headers = self._parse_header(raw)
-                messages.append(headers)
-
-        except Exception as e:
-            print(f"❌ Erreur fetch IMAP : {e}")
-        return messages
-    
-    def fetch_recent(self, limit=10, hours=24):
+    def fetch_recent(self, limit=10, hours=24, folder="INBOX"):
         if not self.conn:
             print("❌ Pas de connexion active")
             return []
@@ -103,53 +44,43 @@ class IMAPClient:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         try:
-            self.conn.select("INBOX")
-            typ,  data = self.conn.search(None, 'ALL')
+            encoded_folder = self.encode_utf7(folder)
+            self.conn.select(encoded_folder)
+            typ, data = self.conn.search(None, 'ALL')
             ids = data[0].split()
 
             for num in reversed(ids):
-                # 1. Fetch des en-têtes
                 typ, msg_data = self.conn.fetch(num, '(BODY[HEADER.FIELDS (FROM SUBJECT DATE)])')
                 raw = msg_data[0][1].decode()
                 headers = self._parse_header(raw)
-               
+
                 from_email = headers["from"].lower()
-                # ❌ Skip tous les mails techniques de Proton sauf adresse perso ksh2177@proton.me
                 proton_blacklist = [
                     "@notify.proton.me",
                     "@calendar.proton.me",
                     "@mail.proton.me",
                     "@support.proton.me",
                 ]
-
                 if any(bad in from_email for bad in proton_blacklist):
                     print(f"⏭️ Mail Proton technique ignoré : {from_email}")
                     continue
-                
-                # 2. Fetch du corps texte brut
+
                 typ, body_data = self.conn.fetch(num, '(BODY[TEXT])')
                 body_raw = body_data[0][1]
-                
-                #Tentative : base64 d'abord
+
                 try:
-                    decoded = base64.base64decode(body_raw).decode("utf-8")
-                    body = decoded
+                    body = base64.b64decode(body_raw).decode("utf-8")
                 except Exception:
                     try:
-                        # Fallback : quoted-printable
                         body = quopri.decodestring(body_raw).decode("utf-8", errors="replace")
                     except Exception:
-                        # Dernier recours : brut
                         body = body_raw.decode("utf-8", errors="replace")
 
-                # Nettoyage texte final
                 body = self._clean_body(self._html_to_text(body))
 
-                # 5. Filtrage mail calendar proton verbeux
                 if "BEGIN:VCALENDAR" in body or "PRODID:-//ProtonCalendar//" in body:
-                    continue # skip
+                    continue
 
-                # 6. Ajouter au message
                 headers["body"] = body
 
                 try:
@@ -158,7 +89,7 @@ class IMAPClient:
                         messages.append(headers)
                         if len(messages) >= limit:
                             break
-                except Exception as e:
+                except Exception:
                     continue
 
         except Exception as e:
@@ -209,18 +140,38 @@ class IMAPClient:
 
         return "\n".join(clean).strip()
 
+    @staticmethod
+    def encode_utf7(folder: str) -> str:
+        res = []
+        buffer = ""
+        def flush():
+            nonlocal buffer
+            if buffer:
+                b64 = base64.b64encode(buffer.encode("utf-16be")).decode("ascii")
+                res.append("&" + b64.rstrip('=') + "-")
+                buffer = ""
+        for c in folder:
+            if ord(c) in range(0x20, 0x7f) and c != "&":
+                flush()
+                res.append(c)
+            elif c == "&":
+                flush()
+                res.append("&-")
+            else:
+                buffer += c
+        flush()
+        return "".join(res)
+
 if __name__ == "__main__":
     client = IMAPClient()
     client.connect()
-    mails = client.fetch_recent(limit=5, hours=2)
+    mails = client.fetch_recent(limit=5, hours=2, folder="Labels/ksh - Dev")
 
     for mail in mails:
         from_info = client._parse_from(mail['from'])
-
         try:
             dt = parsedate_to_datetime(mail["date"])
             short_date = dt.strftime("%d %b %H:%M")
         except Exception:
             short_date = mail["date"]
-
         print(f"[{short_date}] {from_info['name']} <{from_info['email']}> - {mail['subject']}")
